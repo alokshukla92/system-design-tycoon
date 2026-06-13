@@ -1,0 +1,47 @@
+# ── dependencies ───────────────────────────────────────────────────────────
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# ── next.js ────────────────────────────────────────────────────────────────
+/.next/
+/out/
+/build
+next-env.d.ts
+
+# ── production ─────────────────────────────────────────────────────────────
+/dist
+
+# ── testing ────────────────────────────────────────────────────────────────
+/coverage
+
+# ── misc / editors ─────────────────────────────────────────────────────────
+.DS_Store
+*.pem
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.tsbuildinfo
+
+# ── debug logs ─────────────────────────────────────────────────────────────
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ── env files (never commit secrets) ───────────────────────────────────────
+.env
+.env*.local
+.env.development
+.env.production
+
+# ── local scratch ──────────────────────────────────────────────────────────
+# transient files created during local verification/debugging
+scripts/_*.mjs
+/tmp/
+*.local

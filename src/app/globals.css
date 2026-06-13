@@ -1,0 +1,97 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  height: 100%;
+  background: #07090f;
+  color: #e2e6f2;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* slim scrollbars for the ops-dashboard look */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #2a3558 transparent;
+}
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #2a3558;
+  border-radius: 3px;
+}
+
+/* ── React Flow dark theme ─────────────────────────────────────────────── */
+.react-flow {
+  background: #0b0e17;
+}
+.react-flow__attribution {
+  background: transparent;
+  color: #3d4a75;
+}
+.react-flow__controls {
+  box-shadow: none;
+}
+.react-flow__controls-button {
+  background: #151b2e;
+  border-bottom: 1px solid #1e2742;
+  fill: #8b98c2;
+}
+.react-flow__controls-button:hover {
+  background: #1e2742;
+}
+.react-flow__edge-path {
+  stroke: #3d4a75;
+  stroke-width: 1.5;
+}
+.react-flow__handle {
+  width: 9px;
+  height: 9px;
+  background: #5b6b9e;
+  border: 2px solid #0b0e17;
+}
+.react-flow__handle:hover {
+  background: #60a5fa;
+}
+.react-flow__minimap {
+  background: #0b0e17;
+}
+
+/* traffic flow animation along edges */
+@keyframes dashflow {
+  to {
+    stroke-dashoffset: -20;
+  }
+}
+.edge-flow {
+  stroke-dasharray: 6 4;
+  animation: dashflow 0.9s linear infinite;
+}
+.edge-flow-fast {
+  stroke-dasharray: 6 4;
+  animation: dashflow 0.35s linear infinite;
+}
+.edge-flow-error {
+  stroke-dasharray: 4 4;
+  animation: dashflow 0.5s linear infinite;
+}
+
+/* failing node pulse */
+@keyframes alarmpulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 7px rgba(248, 113, 113, 0);
+  }
+}
+.node-alarm {
+  animation: alarmpulse 1.1s ease-in-out infinite;
+}
