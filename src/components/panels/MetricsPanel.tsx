@@ -13,14 +13,35 @@ export function MetricsPanel() {
   const history = useGame((s) => s.metricsHistory);
   const level = useGame((s) => s.level);
   const incident = useGame((s) => s.incident);
+  const interview = useGame((s) => s.interview);
   const lostRevenue = useGame((s) => s.lostRevenue);
   const m = history[history.length - 1];
-  const slo = level?.slo ?? incident?.slo;
+  const slo = level?.slo ?? incident?.slo ?? interview?.slo;
 
+  // Before the run there are no live metrics — show the targets the player is
+  // designing toward (especially the budget) so they're never flying blind.
   if (!m) {
+    if (!slo) {
+      return (
+        <div className="flex h-full items-center justify-center text-xs text-ink-500">
+          Metrics appear when the simulation runs.
+        </div>
+      );
+    }
     return (
-      <div className="flex h-full items-center justify-center text-xs text-ink-500">
-        Metrics appear when the simulation runs.
+      <div className="flex h-full items-center gap-6 overflow-x-auto px-4">
+        <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wider text-ink-400">
+          🎯 Targets
+        </span>
+        <Stat label="p95 latency" value={`≤ ${slo.maxP95Ms}ms`} />
+        <Stat label="Availability" value={`≥ ${slo.minAvailabilityPct}%`} />
+        <Stat label="Error rate" value={`≤ ${(slo.maxErrorRate * 100).toFixed(1)}%`} />
+        {!incident && (
+          <Stat label="Budget" value={`$${fmt(slo.maxMonthlyBudget)}/mo`} tone="warn" />
+        )}
+        <span className="ml-auto shrink-0 text-[10px] text-ink-500">
+          ▶ Launch to see live metrics against these targets
+        </span>
       </div>
     );
   }
