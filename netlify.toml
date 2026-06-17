@@ -1,0 +1,14 @@
+# Netlify deploy config for System Design Tycoon (Next.js 14, App Router).
+# The official plugin handles routing/build output; the app is fully
+# client-side (progress lives in the browser's localStorage), so no env vars.
+
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  # Match the local toolchain (avoids "works on my machine" build drift).
+  NODE_VERSION = "18.20.8"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
