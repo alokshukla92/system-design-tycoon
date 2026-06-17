@@ -2,66 +2,104 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Theme tokens ─────────────────────────────────────────────────────────
+   The "ink" ramp is semantic: low numbers are text, high numbers are
+   surfaces. Dark is the default; .light inverts the ramp so every existing
+   bg-ink-900 / text-ink-100 class themes automatically. */
 :root {
   color-scheme: dark;
+  --ink-950: 7 9 15;
+  --ink-900: 11 14 23;
+  --ink-850: 16 21 36;
+  --ink-800: 21 27 46;
+  --ink-700: 30 39 66;
+  --ink-600: 42 53 88;
+  --ink-500: 61 74 117;
+  --ink-400: 91 107 158;
+  --ink-300: 139 152 194;
+  --ink-200: 185 194 221;
+  --ink-100: 226 230 242;
+
+  --rf-dot: 30 39 66; /* react-flow background dots */
+}
+
+/* Scoped to <html> specifically: React Flow puts its OWN `light`/`dark` class
+   on the .react-flow container, so a bare `.light` selector would collide and
+   leak light-mode variables into the canvas. `:root.light` only ever matches
+   the document element. */
+:root.light {
+  color-scheme: light;
+  --ink-950: 255 255 255;
+  --ink-900: 247 248 250;
+  --ink-850: 241 243 247;
+  --ink-800: 233 236 242;
+  --ink-700: 213 220 230;
+  --ink-600: 184 192 207;
+  --ink-500: 124 134 153;
+  --ink-400: 92 103 124;
+  --ink-300: 71 82 104;
+  --ink-200: 42 49 66;
+  --ink-100: 17 21 31;
+
+  --rf-dot: 203 210 222;
 }
 
 html,
 body {
   height: 100%;
-  background: #07090f;
-  color: #e2e6f2;
+  background: rgb(var(--ink-950));
+  color: rgb(var(--ink-100));
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 /* slim scrollbars for the ops-dashboard look */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #2a3558 transparent;
+  scrollbar-color: rgb(var(--ink-600)) transparent;
 }
 *::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 *::-webkit-scrollbar-thumb {
-  background: #2a3558;
+  background: rgb(var(--ink-600));
   border-radius: 3px;
 }
 
-/* ── React Flow dark theme ─────────────────────────────────────────────── */
+/* ── React Flow theming ────────────────────────────────────────────────── */
 .react-flow {
-  background: #0b0e17;
+  background: rgb(var(--ink-900));
 }
 .react-flow__attribution {
   background: transparent;
-  color: #3d4a75;
+  color: rgb(var(--ink-500));
 }
 .react-flow__controls {
   box-shadow: none;
 }
 .react-flow__controls-button {
-  background: #151b2e;
-  border-bottom: 1px solid #1e2742;
-  fill: #8b98c2;
+  background: rgb(var(--ink-800));
+  border-bottom: 1px solid rgb(var(--ink-700));
+  fill: rgb(var(--ink-300));
 }
 .react-flow__controls-button:hover {
-  background: #1e2742;
+  background: rgb(var(--ink-700));
 }
 .react-flow__edge-path {
-  stroke: #3d4a75;
+  stroke: rgb(var(--ink-500));
   stroke-width: 1.5;
 }
 .react-flow__handle {
   width: 9px;
   height: 9px;
-  background: #5b6b9e;
-  border: 2px solid #0b0e17;
+  background: rgb(var(--ink-400));
+  border: 2px solid rgb(var(--ink-900));
 }
 .react-flow__handle:hover {
   background: #60a5fa;
 }
 .react-flow__minimap {
-  background: #0b0e17;
+  background: rgb(var(--ink-900));
 }
 
 /* traffic flow animation along edges */

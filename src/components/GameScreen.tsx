@@ -14,6 +14,8 @@ import { SimControls } from "@/components/panels/SimControls";
 import { Brief } from "@/components/screens/Brief";
 import { Debrief } from "@/components/screens/Debrief";
 import { InterviewReportModal } from "@/components/screens/InterviewReport";
+import { HelpModal } from "@/components/screens/HelpModal";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button, Tabs } from "@/components/ui";
 
 const TICK_MS = 700;
@@ -31,6 +33,7 @@ export function GameScreen() {
   const exitToMenu = useGame((s) => s.exitToMenu);
   const selectedNodeId = useGame((s) => s.selectedNodeId);
   const [rightTab, setRightTab] = useState("palette");
+  const [helpOpen, setHelpOpen] = useState(false);
 
   // selecting a node on the canvas jumps to its inspector
   useEffect(() => {
@@ -66,6 +69,9 @@ export function GameScreen() {
         <Button variant="ghost" className="px-2 text-xs" onClick={() => { exitToMenu(); router.push("/"); }}>
           ← Menu
         </Button>
+        <Button variant="secondary" className="px-2 text-xs" onClick={() => setHelpOpen(true)}>
+          ❓ How to play
+        </Button>
         <div className="min-w-0">
           <div className="truncate text-sm font-bold text-ink-100">{title}</div>
           <div className="truncate text-[10px] text-ink-400">{subtitle}</div>
@@ -73,6 +79,7 @@ export function GameScreen() {
         <div className="ml-auto flex items-center gap-4">
           <ScoreHUD />
           <SimControls />
+          <ThemeToggle />
         </div>
       </header>
 
@@ -114,6 +121,7 @@ export function GameScreen() {
       <Brief />
       <Debrief />
       <InterviewReportModal />
+      <HelpModal open={helpOpen} onClose={() => setHelpOpen(false)} />
     </div>
   );
 }

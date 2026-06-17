@@ -26,6 +26,7 @@ function CanvasInner() {
   const onConnect = useGame((s) => s.onConnect);
   const addNode = useGame((s) => s.addNode);
   const selectNode = useGame((s) => s.selectNode);
+  const theme = useGame((s) => s.theme);
   const { screenToFlowPosition } = useReactFlow();
   const wrapper = useRef<HTMLDivElement>(null);
 
@@ -57,13 +58,14 @@ function CanvasInner() {
           e.preventDefault();
           e.dataTransfer.dropEffect = "move";
         }}
+        colorMode={theme}
         fitView
         minZoom={0.3}
         maxZoom={1.6}
         proOptions={{ hideAttribution: true }}
         deleteKeyCode={["Backspace", "Delete"]}
       >
-        <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="#1e2742" />
+        <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="rgb(var(--rf-dot))" />
         <Controls showInteractive={false} />
       </ReactFlow>
     </div>

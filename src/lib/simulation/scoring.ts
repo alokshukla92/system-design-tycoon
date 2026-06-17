@@ -1,4 +1,4 @@
-import type { GraphSnapshot, Scores, SimMetrics, SLO, WorkloadProfile } from "@/lib/types";
+import type { ComponentKind, GraphSnapshot, Scores, SimMetrics, SLO, WorkloadProfile } from "@/lib/types";
 import { CATALOG } from "@/lib/catalog/components";
 import { capacityOf, initialEngineState, stepSim, type EngineState, type TickContext } from "./engine";
 
@@ -79,10 +79,20 @@ export interface ScoreInput {
   slo: SLO;
   /** recent metrics window (last N ticks) — empty before first run */
   recent: SimMetrics[];
+  /**
+   * Component kinds the player can actually place right now (campaign levels
+   * gate the palette). When omitted, everything is assumed available
+   * (incident / interview modes). Scores never penalize, and tips never
+   * suggest, a component that isn't available yet.
+   */
+  available?: ComponentKind[];
 }
 
+const canUse = (available: ComponentKind[] | undefined, kind: ComponentKind) =>
+  !available || available.includes(kind);
+
 export function computeScores(input: ScoreInput): Scores {
-  const { graph, workload, targetUsers, slo, recent } = input;
+  const { graph, workload, targetUsers, slo, recent, available } = input;
   const spof = analyzeSpofs(graph);
   const playerNodes = graph.nodes.filter((n) => n.data.kind !== "users");
 
@@ -94,7 +104,7 @@ export function computeScores(input: ScoreInput): Scores {
   // ── Reliability: redundancy + protective patterns ──────────────────────
   let reliability = 100;
   reliability -= spof.spofs.length * 18;
-  if (!spof.hasLb && targetUsers > 20_000) reliability -= 15;
+  if (!spof.hasLb && targetUsers > 20_000 && canUse(available, "load_balancer")) reliability -= 15;
   if (!spof.hasBreakerOrLimiter && targetUsers > 100_000) reliability -= 12;
   if (!spof.hasObservability && targetUsers > 50_000) reliability -= 8;
   if (recent.length > 0) {
@@ -166,20 +176,23 @@ export interface AxisExplanation {
 export type ScoreBreakdown = Record<keyof Scores, AxisExplanation>;
 
 const DB_KINDS = ["postgres", "mysql", "mongodb", "cassandra", "dynamodb"];
+const COMPUTE_KINDS = ["api_server", "k8s_cluster"];
 
 /** Highest-utilization player node from the last simulated tick, if any. */
-function bottleneck(graph: GraphSnapshot): { label: string; util: number } | null {
-  let best: { label: string; util: number } | null = null;
+function bottleneck(graph: GraphSnapshot): { label: string; util: number; kind: string } | null {
+  let best: { label: string; util: number; kind: string } | null = null;
   for (const n of graph.nodes) {
     if (n.data.kind === "users") continue;
     const rt = n.data.runtime;
-    if (rt && (!best || rt.utilization > best.util)) best = { label: n.data.label, util: rt.utilization };
+    if (rt && (!best || rt.utilization > best.util)) best = { label: n.data.label, util: rt.utilization, kind: n.data.kind };
   }
   return best && best.util > 0.6 ? best : null;
 }
 
 export function explainScores(input: ScoreInput, scores: Scores): ScoreBreakdown {
-  const { graph, targetUsers, slo, recent } = input;
+  const { graph, targetUsers, slo, recent, available } = input;
+  const hasLbUnlocked = canUse(available, "load_balancer");
+  const hasRedisUnlocked = canUse(available, "redis");
   const spof = analyzeSpofs(graph);
   const playerNodes = graph.nodes.filter((n) => n.data.kind !== "users");
   const kinds = new Set(playerNodes.map((n) => n.data.kind));
@@ -198,13 +211,14 @@ export function explainScores(input: ScoreInput, scores: Scores): ScoreBreakdown
   // ── Reliability ──────────────────────────────────────────────────────────
   for (const label of spof.spofs) {
     out.reliability.reasons.push(`Single point of failure: ${label} — one hardware fault takes it down (−18)`);
+    const lbClause = hasLbUnlocked ? ", or put it behind a load balancer" : "";
     out.reliability.tips.push(
       DB_KINDS.includes(graph.nodes.find((n) => n.data.label === label)?.data.kind ?? "")
         ? `Add a replica to ${label} (replicas / replica-set members) so a failover target exists`
-        : `Run ${label} as 2+ instances (raise its instance count, or put it behind a load balancer)`
+        : `Run ${label} as 2+ instances (raise its instance count${lbClause})`
     );
   }
-  if (!spof.hasLb && targetUsers > 20_000) {
+  if (!spof.hasLb && targetUsers > 20_000 && hasLbUnlocked) {
     out.reliability.reasons.push(`No load balancer at ${usersLabel} users (−15)`);
     out.reliability.tips.push("Add a Load Balancer in front of your compute tier and run multiple instances");
   }
@@ -227,11 +241,25 @@ export function explainScores(input: ScoreInput, scores: Scores): ScoreBreakdown
     out.scalability.reasons.push(
       `Capacity ceiling is only ~${(scores.scalability / 50).toFixed(1)}× the target — little headroom for spikes`
     );
+    const cacheClause = hasRedisUnlocked ? ", or cache its load" : "";
+    const cacheItem = hasRedisUnlocked ? "a cache, " : "";
     out.scalability.tips.push(
       neck
-        ? `${neck.label} saturates first (${Math.round(Math.min(neck.util, 9.99) * 100)}% utilized) — scale it out, add replicas, or cache its load`
-        : "Add capacity to the tier that saturates first: more instances, read replicas, a cache, or sharding"
+        ? `${neck.label} saturates first (${Math.round(Math.min(neck.util, 9.99) * 100)}% utilized) — scale it out, add replicas${cacheClause}`
+        : `Add capacity to the tier that saturates first: more instances, read replicas, ${cacheItem}or sharding`
     );
+    // The load balancer splits traffic evenly across compute NODES, not by size.
+    if (neck && COMPUTE_KINDS.includes(neck.kind)) {
+      out.scalability.tips.push(
+        "Keep your compute nodes the same size — traffic splits evenly across them, so the smallest one saturates first and caps everything. One node with more instances avoids this.",
+      );
+    }
+    // Writes funnel into one primary regardless of replicas — that needs sharding.
+    if (neck && DB_KINDS.includes(neck.kind) && Number(graph.nodes.find((n) => n.data.label === neck.label)?.data.config.shards ?? 1) <= 1) {
+      out.scalability.tips.push(
+        "Replicas multiply reads, but every write still hits one primary. To raise write capacity you must shard (split the data) — with a hashed key so load spreads evenly.",
+      );
+    }
   }
 
   // ── Latency ──────────────────────────────────────────────────────────────
@@ -241,8 +269,8 @@ export function explainScores(input: ScoreInput, scores: Scores): ScoreBreakdown
       out.latency.reasons.push(`p95 latency ${Math.round(avgP95)}ms exceeded the ${slo.maxP95Ms}ms target`);
       out.latency.tips.push(
         neck
-          ? `${neck.label} is near saturation — latency climbs steeply past ~80%. Cache its reads (Redis), add replicas, or scale it`
-          : "Cache hot reads with Redis, add read replicas, index hot queries, or scale the busiest tier"
+          ? `${neck.label} is near saturation — latency climbs steeply past ~80%. ${hasRedisUnlocked ? "Cache its reads (Redis), " : ""}add replicas, index hot queries, or scale it`
+          : `${hasRedisUnlocked ? "Cache hot reads with Redis, " : ""}add read replicas, index hot queries, or scale the busiest tier`
       );
     } else if (scores.latency < 85) {
       out.latency.reasons.push(`p95 latency ${Math.round(avgP95)}ms (target ${slo.maxP95Ms}ms) — passing, but not much margin`);
@@ -253,12 +281,25 @@ export function explainScores(input: ScoreInput, scores: Scores): ScoreBreakdown
   // ── Cost ─────────────────────────────────────────────────────────────────
   if (recent.length > 0) {
     const spend = recent[recent.length - 1].costPerMonth;
+    const pricey = playerNodes.find(
+      (n) => (n.data.tier === "xl" || n.data.tier === "large") && (COMPUTE_KINDS.includes(n.data.kind) || DB_KINDS.includes(n.data.kind) || n.data.kind === "worker")
+    );
     if (spend > slo.maxMonthlyBudget) {
-      out.cost.reasons.push(`$${spend.toLocaleString()}/mo is over the $${slo.maxMonthlyBudget.toLocaleString()}/mo budget`);
-      out.cost.tips.push("Right-size over-provisioned tiers, drop replicas/shards you don't need, and remove unused components");
+      const over = spend - slo.maxMonthlyBudget;
+      out.cost.reasons.push(`$${spend.toLocaleString()}/mo is $${over.toLocaleString()} over the $${slo.maxMonthlyBudget.toLocaleString()}/mo budget`);
+      if (pricey) {
+        out.cost.tips.push(
+          `${pricey.data.label} is on the ${pricey.data.tier.toUpperCase()} tier — vertical scaling is cost-inefficient (XL ≈ 9.5× the price for 5.5× the capacity). Drop it to a smaller tier and add instances for the same throughput at lower cost.`
+        );
+      }
+      out.cost.tips.push("Also trim over-provisioned replicas/shards and remove any component you don't need.");
     } else if (scores.cost < 75) {
       out.cost.reasons.push(`Spend is ${Math.round((spend / slo.maxMonthlyBudget) * 100)}% of budget — getting expensive`);
-      out.cost.tips.push("Check for a smaller instance tier or fewer instances that still meets the SLO");
+      out.cost.tips.push(
+        pricey
+          ? `${pricey.data.label} (${pricey.data.tier.toUpperCase()}) is your priciest-per-request tier — smaller instances scaled out cost less for the same capacity.`
+          : "Look for a smaller instance tier or fewer instances that still meets the SLO."
+      );
     }
   }
 

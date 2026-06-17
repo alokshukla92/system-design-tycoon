@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useGame } from "@/state/store";
 import { Badge, Button, Modal } from "@/components/ui";
 
@@ -30,14 +31,23 @@ export function Brief() {
   const interview = useGame((s) => s.interview);
   const tick = useGame((s) => s.tick);
   const phase = useGame((s) => s.phase);
+  const exitToMenu = useGame((s) => s.exitToMenu);
+  const router = useRouter();
   const [dismissed, setDismissed] = useState(false);
+
+  // Closing the brief (✕ / Esc / backdrop) means "back out" → return to the
+  // menu. Entering the level is the explicit "Take the helm →" action.
+  const backToMenu = () => {
+    exitToMenu();
+    router.push("/");
+  };
 
   const open = !dismissed && tick === 0 && phase === "design";
   if (!open) return null;
 
   if (level) {
     return (
-      <Modal open wide>
+      <Modal open wide onClose={backToMenu}>
         <div className="mb-1 flex items-center gap-2">
           <Badge tone="accent">Level {level.number}</Badge>
           <Badge>{fmt(level.users)} → {fmt(level.usersEnd)} users</Badge>
@@ -66,7 +76,7 @@ export function Brief() {
 
   if (incident) {
     return (
-      <Modal open wide>
+      <Modal open wide onClose={backToMenu}>
         <div className="mb-1 flex items-center gap-2">
           <Badge tone="crit">⚠ ACTIVE INCIDENT</Badge>
           <Badge>{fmt(incident.users)} users</Badge>
@@ -90,7 +100,7 @@ export function Brief() {
 
   if (interview) {
     return (
-      <Modal open wide>
+      <Modal open wide onClose={backToMenu}>
         <div className="mb-1 flex items-center gap-2">
           <Badge tone="accent">Architecture Interview</Badge>
         </div>

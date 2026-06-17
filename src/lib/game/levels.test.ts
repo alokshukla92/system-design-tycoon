@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import { LEVELS } from "./levels";
 import type { GraphSnapshot, LevelDef } from "@/lib/types";
 import { initialEngineState, stepSim, type EngineState, type TickContext } from "@/lib/simulation/engine";
+import { initialFailureState, stepFailures, type FailureEngineState } from "@/lib/simulation/failures";
 import { computeScores, explainScores } from "@/lib/simulation/scoring";
 import { defaultConfig } from "@/lib/catalog/components";
+
+const REPAIR_DELAY = 18; // must match the store
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Game-balance regression tests: each early level must FAIL with the stock
@@ -62,6 +65,74 @@ function withConfig(graph: GraphSnapshot, kind: string, patch: Record<string, st
     ),
   };
 }
+
+// Crash-aware harness: replays a level THROUGH the failure engine (scripted
+// node crashes + repairs), exactly as the store does. Needed for levels whose
+// lesson is surviving a failure.
+function playLevelWithCrashes(level: LevelDef, graph: GraphSnapshot) {
+  let eng: EngineState = initialEngineState(7);
+  let fail: FailureEngineState = initialFailureState();
+  let ctxPatch = { spikeMult: 1, hotKeyActive: false, zoneOutage: 0 };
+  let repairs: { nodeId: string; atTick: number }[] = [];
+  const errs: number[] = [];
+  const avails: number[] = [];
+  for (let tick = 1; tick <= level.durationTicks; tick++) {
+    const users = Math.round(level.users + (level.usersEnd - level.users) * (tick / level.durationTicks));
+    const r = stepSim(eng, graph, { users, workload: level.workload, ...ctxPatch });
+    const f = stepFailures(fail, {
+      tick, signals: r.signals, scripted: level.scripted, graph, engineState: r.state, hasObservability: true,
+    });
+    for (const cr of f.crashRequests) {
+      const ns = r.state.nodes[cr.nodeId];
+      if (ns) { ns.crashedInstances += cr.instances; repairs.push({ nodeId: cr.nodeId, atTick: tick + REPAIR_DELAY }); }
+    }
+    for (const rp of repairs.filter((x) => x.atTick <= tick)) {
+      const ns = r.state.nodes[rp.nodeId];
+      if (ns && ns.crashedInstances > 0) ns.crashedInstances -= 1;
+    }
+    repairs = repairs.filter((x) => x.atTick > tick);
+    eng = r.state; fail = f.state; ctxPatch = f.ctxPatch;
+    errs.push(r.metrics.errorRate);
+    avails.push(r.metrics.availabilityPct);
+  }
+  const last = <T>(a: T[]) => a.slice(-40);
+  const avg = (a: number[]) => a.reduce((x, y) => x + y, 0) / a.length;
+  return { avgErr: avg(last(errs)), avgAvail: avg(last(avails)) };
+}
+
+describe("level 4 balance — replication survives a DB crash", () => {
+  const level = LEVELS[3];
+  const u = { id: "u", position: { x: 0, y: 0 }, data: { kind: "users", label: "Users", tier: "base", instances: 1, config: {} } } as never;
+  const mkApi = (n: number) => ({ id: `api${Math.random()}`, position: { x: 0, y: 0 }, data: { kind: "api_server", label: "API", tier: "large", instances: n, config: defaultConfig("api_server") } } as never);
+  const mkRedis = () => ({ id: "rd", position: { x: 0, y: 0 }, data: { kind: "redis", label: "Redis", tier: "small", instances: 3, config: defaultConfig("redis") } } as never);
+  const mkMongo = (instances: number, replicaSet: number) => ({ id: "db", position: { x: 0, y: 0 }, data: { kind: "mongodb", label: "MongoDB", tier: "medium", instances, config: { ...defaultConfig("mongodb"), indexing: "tuned", replicaSet } } } as never);
+  const id = (x: never) => (x as { id: string }).id;
+  const build = (mongo: never) => {
+    const a1 = mkApi(4), a2 = mkApi(4), rd = mkRedis();
+    return {
+      nodes: [u, a1, a2, rd, mongo],
+      edges: [
+        { id: "e0", source: id(u), target: id(a1) },
+        { id: "e1", source: id(u), target: id(a2) },
+        { id: "e2", source: id(a1), target: id(rd) },
+        { id: "e3", source: id(a1), target: id(mongo) },
+        { id: "e4", source: id(a2), target: id(mongo) },
+      ],
+    } as GraphSnapshot;
+  };
+
+  it("a SINGLE-instance database is destroyed by the crash (lesson fires)", () => {
+    const r = playLevelWithCrashes(level, build(mkMongo(1, 0)));
+    const failed = r.avgAvail < level.slo.minAvailabilityPct || r.avgErr > level.slo.maxErrorRate;
+    expect(failed).toBe(true);
+  });
+
+  it("a REPLICATED database survives the crash and passes the SLO", () => {
+    const r = playLevelWithCrashes(level, build(mkMongo(2, 2)));
+    expect(r.avgAvail).toBeGreaterThanOrEqual(level.slo.minAvailabilityPct);
+    expect(r.avgErr).toBeLessThanOrEqual(level.slo.maxErrorRate);
+  });
+});
 
 describe("level 1 balance — single-server ceiling", () => {
   const level = LEVELS[0];
@@ -131,6 +202,31 @@ describe("score breakdown — actionable reasons + tips", () => {
     expect(relText).toContain("Single point of failure");
     // and there is at least one concrete, actionable tip
     expect(breakdown.reliability.tips.length).toBeGreaterThan(0);
+  });
+
+  it("tips never suggest a component the level hasn't unlocked yet", () => {
+    const u = mk("users");
+    const api = mk("api_server");
+    const db = mk("postgres", { indexing: "tuned" });
+    const graph = {
+      nodes: [u, api, db],
+      edges: [
+        { id: "e0", source: (u as { id: string }).id, target: (api as { id: string }).id },
+        { id: "e1", source: (api as { id: string }).id, target: (db as { id: string }).id },
+      ],
+    };
+
+    // Level 1 palette: no load balancer, no redis
+    const gatedInput = { graph, workload, targetUsers: 15_000, slo, recent: [], available: LEVELS[0].unlocked };
+    const gated = explainScores(gatedInput, computeScores(gatedInput));
+    const gatedRel = gated.reliability.tips.join(" ").toLowerCase();
+    expect(gatedRel).toContain("instance"); // still tells you to scale out
+    expect(gatedRel).not.toContain("load balancer"); // but not via a locked component
+
+    // Everything unlocked → the LB suggestion is allowed back in
+    const openInput = { graph, workload, targetUsers: 15_000, slo, recent: [] };
+    const open = explainScores(openInput, computeScores(openInput));
+    expect(open.reliability.tips.join(" ").toLowerCase()).toContain("load balancer");
   });
 
   it("a redundant design has no reliability complaints", () => {

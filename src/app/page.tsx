@@ -7,6 +7,7 @@ import { LEVELS } from "@/lib/game/levels";
 import { INCIDENTS } from "@/lib/game/incidents";
 import { INTERVIEWS } from "@/lib/game/interviews";
 import { Badge, Button, Card, cn } from "@/components/ui";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 function fmt(n: number): string {
   if (n >= 1_000_000) return `${n / 1_000_000}M`;
@@ -33,6 +34,9 @@ export default function Home() {
   return (
     <div className="h-screen overflow-y-auto bg-ink-950">
       <div className="mx-auto max-w-5xl px-6 py-10">
+        <div className="flex justify-end">
+          <ThemeToggle />
+        </div>
         <header className="mb-8 text-center">
           <h1 className="text-4xl font-black tracking-tight text-ink-100">
             System Design <span className="text-accent">Tycoon</span>

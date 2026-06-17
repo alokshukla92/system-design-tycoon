@@ -45,7 +45,7 @@ export function SimControls() {
             onClick={() => setSpeed(s)}
             className={cn(
               "px-2 py-1 font-mono text-[11px] transition-colors",
-              speed === s ? "bg-accent text-ink-950" : "bg-ink-800 text-ink-300 hover:bg-ink-700"
+              speed === s ? "bg-accent text-onbright" : "bg-ink-800 text-ink-300 hover:bg-ink-700"
             )}
           >
             {s}×
@@ -66,7 +66,7 @@ export function SimControls() {
         </div>
       )}
       {tick > 0 && (
-        <Button variant="ghost" onClick={resetRun} title="Restart this scenario from the beginning">
+        <Button variant="ghost" onClick={resetRun} title="Replay from the start, keeping your current design">
           ↺
         </Button>
       )}

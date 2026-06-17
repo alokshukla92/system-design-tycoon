@@ -38,6 +38,24 @@ import { interviewById } from "@/lib/game/interviews";
 import { evaluateInterview, type InterviewReport } from "@/lib/game/evaluate";
 
 export type Phase = "design" | "running" | "paused" | "debrief";
+export type Theme = "dark" | "light";
+
+const THEME_KEY = "sdt-theme";
+
+function readStoredTheme(): Theme {
+  if (typeof window === "undefined") return "dark";
+  return window.localStorage.getItem(THEME_KEY) === "light" ? "light" : "dark";
+}
+
+function applyTheme(theme: Theme) {
+  if (typeof document === "undefined") return;
+  document.documentElement.classList.toggle("light", theme === "light");
+  try {
+    window.localStorage.setItem(THEME_KEY, theme);
+  } catch {
+    /* ignore storage failures */
+  }
+}
 
 export interface LevelResult {
   passed: boolean;
@@ -89,6 +107,11 @@ interface GameStore {
   // persisted career progress
   progress: Record<string, { passed: boolean; overall: number }>;
 
+  // appearance
+  theme: Theme;
+  setTheme: (t: Theme) => void;
+  toggleTheme: () => void;
+
   // actions
   startLevel: (id: string) => void;
   startIncident: (id: string) => void;
@@ -108,7 +131,8 @@ interface GameStore {
   pause: () => void;
   setSpeed: (s: 1 | 2 | 4) => void;
   tickOnce: () => void;
-  resetRun: () => void;
+  resetRun: () => void; // replay from tick 0, KEEPING the player's current design
+  restartFromStarter: () => void; // discard design, rebuild the scenario's starter
   submitInterview: () => void;
   refreshScores: () => void;
   dismissResult: () => void;
@@ -147,6 +171,13 @@ function scenarioOf(s: Pick<GameStore, "mode" | "level" | "incident" | "intervie
   return null;
 }
 
+// Components the player can place right now. Campaign levels gate the palette
+// (must match Palette.tsx); incident/interview unlock everything (undefined).
+function availableOf(s: Pick<GameStore, "mode" | "level">): ComponentKind[] | undefined {
+  if (s.mode === "campaign" && s.level) return [...s.level.unlocked, "worker", "monitoring"];
+  return undefined;
+}
+
 const REPAIR_DELAY = 18; // ticks until a crashed instance is replaced
 
 const freshRun = {
@@ -182,7 +213,18 @@ export const useGame = create<GameStore>()(
       nodeCounter: 0,
       speed: 1,
       progress: {},
+      theme: readStoredTheme(),
       ...freshRun,
+
+      setTheme: (t) => {
+        applyTheme(t);
+        set({ theme: t });
+      },
+      toggleTheme: () => {
+        const next: Theme = get().theme === "light" ? "dark" : "light";
+        applyTheme(next);
+        set({ theme: next });
+      },
 
       startLevel: (id) => {
         const level = levelById(id);
@@ -329,7 +371,23 @@ export const useGame = create<GameStore>()(
       pause: () => set({ running: false, phase: "paused" }),
       setSpeed: (speed) => set({ speed }),
 
+      // Retry KEEPING the current design: reset only the simulation state and
+      // replay from tick 0. The architecture the player built is preserved so
+      // they can tweak one thing and run again, instead of rebuilding from scratch.
       resetRun: () => {
+        const s = get();
+        set({
+          ...freshRun,
+          speed: s.speed,
+          phase: "design",
+          // keep nodes/edges; clear per-node runtime so utilization bars reset
+          nodes: s.nodes.map((n) => ({ ...n, data: { ...n.data, runtime: undefined } })),
+        });
+        get().refreshScores();
+      },
+
+      // Discard the design and rebuild the scenario's original starter.
+      restartFromStarter: () => {
         const s = get();
         if (s.mode === "campaign" && s.level) get().startLevel(s.level.id);
         else if (s.mode === "incident" && s.incident) get().startIncident(s.incident.id);
@@ -350,6 +408,7 @@ export const useGame = create<GameStore>()(
             targetUsers: targetUsersOf(s),
             slo,
             recent: s.metricsHistory.slice(-20),
+            available: availableOf(s),
           };
           const scores = computeScores(scoreInput);
           set({ scores, scoreBreakdown: explainScores(scoreInput, scores) });
@@ -465,6 +524,7 @@ export const useGame = create<GameStore>()(
             const incInput = {
               graph, workload: inc.workload, targetUsers: inc.users, slo: inc.slo,
               recent: metricsHistory.slice(-20),
+              available: availableOf(s),
             };
             const scores = computeScores(incInput);
             result = {
@@ -507,6 +567,7 @@ export const useGame = create<GameStore>()(
           const lvlInput = {
             graph, workload: lvl.workload, targetUsers: lvl.usersEnd, slo: lvl.slo,
             recent: metricsHistory.slice(-20),
+            available: availableOf(s),
           };
           const scores = computeScores(lvlInput);
           result = {

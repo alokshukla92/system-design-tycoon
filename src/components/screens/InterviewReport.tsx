@@ -25,7 +25,7 @@ export function InterviewReportModal() {
   const hire = report.verdict.startsWith("Strong Hire") || report.verdict.startsWith("Hire");
 
   return (
-    <Modal open wide>
+    <Modal open wide onClose={dismissResult}>
       <div className="mb-2 flex items-center gap-2">
         <Badge tone={hire ? "ok" : "warn"}>Interview feedback</Badge>
         <Badge tone="accent">{report.overall}/100</Badge>

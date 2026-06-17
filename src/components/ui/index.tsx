@@ -1,6 +1,6 @@
 "use client";
 
-import { type ButtonHTMLAttributes, type HTMLAttributes, type ReactNode, useState } from "react";
+import { type ButtonHTMLAttributes, type HTMLAttributes, type ReactNode, useEffect, useState } from "react";
 
 // Minimal shadcn-style primitives, hand-rolled for full control.
 
@@ -18,11 +18,11 @@ export function Button({
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant }) {
   const styles: Record<ButtonVariant, string> = {
-    primary: "bg-accent/90 hover:bg-accent text-ink-950 font-semibold",
+    primary: "bg-accent/90 hover:bg-accent text-onbright font-semibold",
     secondary: "bg-ink-700 hover:bg-ink-600 text-ink-100 border border-ink-600",
     ghost: "bg-transparent hover:bg-ink-700/60 text-ink-300",
-    danger: "bg-crit/80 hover:bg-crit text-ink-950 font-semibold",
-    success: "bg-ok/80 hover:bg-ok text-ink-950 font-semibold",
+    danger: "bg-crit/80 hover:bg-crit text-onbright font-semibold",
+    success: "bg-ok/80 hover:bg-ok text-onbright font-semibold",
   };
   return (
     <button
@@ -122,15 +122,43 @@ export function Modal({
   open,
   children,
   wide,
+  onClose,
 }: {
   open: boolean;
   children: ReactNode;
   wide?: boolean;
+  /** When provided, the modal gets a ✕ button, Esc-to-close, and backdrop click. */
+  onClose?: () => void;
 }) {
+  useEffect(() => {
+    if (!open || !onClose) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/80 p-6 backdrop-blur-sm">
-      <Card className={cn("max-h-[88vh] w-full overflow-y-auto p-6 shadow-2xl", wide ? "max-w-3xl" : "max-w-xl")}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/80 p-6 backdrop-blur-sm"
+      onClick={onClose ? () => onClose() : undefined}
+    >
+      <Card
+        className={cn("relative max-h-[88vh] w-full overflow-y-auto p-6 shadow-2xl", wide ? "max-w-3xl" : "max-w-xl")}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="absolute right-3 top-3 z-10 flex h-7 w-7 items-center justify-center rounded-md text-ink-400 transition-colors hover:bg-ink-700 hover:text-ink-100"
+          >
+            ✕
+          </button>
+        )}
         {children}
       </Card>
     </div>
@@ -203,16 +231,19 @@ export function NumberInput({
 export function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
     <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
       onClick={() => onChange(!checked)}
       className={cn(
-        "relative h-5 w-9 rounded-full transition-colors",
-        checked ? "bg-accent" : "bg-ink-600"
+        "relative inline-flex h-[22px] w-10 shrink-0 items-center rounded-full border transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
+        checked ? "border-accent bg-accent" : "border-ink-500 bg-ink-700"
       )}
     >
       <span
         className={cn(
-          "absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform",
-          checked ? "translate-x-4" : "translate-x-0.5"
+          "inline-block h-[16px] w-[16px] transform rounded-full bg-white shadow-sm transition-transform duration-200",
+          checked ? "translate-x-[21px]" : "translate-x-[3px]"
         )}
       />
     </button>

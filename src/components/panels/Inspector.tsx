@@ -81,31 +81,39 @@ export function Inspector() {
         </Field>
       )}
 
-      {spec.config.map((f) => (
-        <Field key={f.key} label={f.label} hint={f.hint}>
-          {f.type === "select" && (
-            <Select
-              value={String(node.data.config[f.key] ?? f.default)}
-              onChange={(v) => updateNodeConfig(selectedId, f.key, v)}
-              options={(f.options ?? []).map((o) => ({ value: o.value, label: o.label }))}
-            />
-          )}
-          {f.type === "number" && (
-            <NumberInput
-              value={Number(node.data.config[f.key] ?? f.default)}
-              min={f.min}
-              max={f.max}
-              onChange={(v) => updateNodeConfig(selectedId, f.key, v)}
-            />
-          )}
-          {f.type === "toggle" && (
-            <Toggle
-              checked={node.data.config[f.key] === true}
-              onChange={(v) => updateNodeConfig(selectedId, f.key, v)}
-            />
-          )}
-        </Field>
-      ))}
+      {spec.config.map((f) =>
+        f.type === "toggle" ? (
+          // Toggles read better inline: label on the left, switch on the right.
+          <div key={f.key}>
+            <label className="flex cursor-pointer items-center justify-between gap-3">
+              <span className="text-[11px] font-medium text-ink-200">{f.label}</span>
+              <Toggle
+                checked={node.data.config[f.key] === true}
+                onChange={(v) => updateNodeConfig(selectedId, f.key, v)}
+              />
+            </label>
+            {f.hint && <p className="mt-1 text-[10px] leading-snug text-ink-500">{f.hint}</p>}
+          </div>
+        ) : (
+          <Field key={f.key} label={f.label} hint={f.hint}>
+            {f.type === "select" && (
+              <Select
+                value={String(node.data.config[f.key] ?? f.default)}
+                onChange={(v) => updateNodeConfig(selectedId, f.key, v)}
+                options={(f.options ?? []).map((o) => ({ value: o.value, label: o.label }))}
+              />
+            )}
+            {f.type === "number" && (
+              <NumberInput
+                value={Number(node.data.config[f.key] ?? f.default)}
+                min={f.min}
+                max={f.max}
+                onChange={(v) => updateNodeConfig(selectedId, f.key, v)}
+              />
+            )}
+          </Field>
+        )
+      )}
 
       {!isUsers && (
         <div className="space-y-2 border-t border-ink-700 pt-3">

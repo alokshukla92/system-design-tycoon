@@ -194,9 +194,10 @@ export const LEVELS: LevelDef[] = [
     },
     slo: { maxP95Ms: 250, minAvailabilityPct: 99.5, maxErrorRate: 0.015, maxMonthlyBudget: 3000 },
     scripted: [
-      { atTick: 45, type: "node_crash", targetKind: "mongodb", announcement: "🔥 Hardware failure in the data center. A database instance just went dark." },
-      { atTick: 46, type: "node_crash", targetKind: "postgres", announcement: "🔥 Hardware failure in the data center. A database instance just went dark." },
-      { atTick: 90, type: "node_crash", targetKind: "api_server", announcement: "An API instance OOM-killed itself. RIP." },
+      { atTick: 35, type: "node_crash", targetKind: "mongodb", announcement: "🔥 Early tremor: a database instance briefly dropped. A warning shot." },
+      { atTick: 36, type: "node_crash", targetKind: "postgres", announcement: "🔥 Early tremor: a database instance briefly dropped. A warning shot." },
+      { atTick: 88, type: "node_crash", targetKind: "mongodb", announcement: "🔥 3AM PAGE: a primary database instance just died under peak load. Do you have a failover?" },
+      { atTick: 89, type: "node_crash", targetKind: "postgres", announcement: "🔥 3AM PAGE: a primary database instance just died under peak load. Do you have a failover?" },
     ],
     unlocked: [...BASE_UNLOCKS, "redis", "monitoring"],
     debrief: {
